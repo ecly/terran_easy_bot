@@ -34,15 +34,13 @@ ACTION_BUILD_STARPORT = 'buildstarport'
 ACTION_BUILD_FACTORY = 'buildfactory'
 ACTION_BUILD_REFINERY = 'buildrefinery'
 
+SMALL_PIX = 69
 BIG_PIX = 137
-SMALL_PIX = 6
-
 SMALL_GRID = 7
 BIG_GRID = 12
 
 COLUMN_HEIGHT = 5
 SHARED_COLUMN = {BUILD_STARPORT, BUILD_BARRACKS, BUILD_FACTORY}
-
 
 class Building:
     def __init__(self, name, identifier, build, smart_action, max_amount, size_grid, size_pixels):
@@ -56,7 +54,7 @@ class Building:
 
     @staticmethod
     def buildings():
-        return [Building("Supply Depot", TERRAN_SUPPLY_DEPOT, BUILD_SUPPLY_DEPOT, ACTION_BUILD_SUPPLY_DEPOT, 5, SMALL_GRID, SMALL_PIX),
+        return [Building("Supply Depot", TERRAN_SUPPLY_DEPOT, BUILD_SUPPLY_DEPOT, ACTION_BUILD_SUPPLY_DEPOT, 8, SMALL_GRID, SMALL_PIX),
                 Building("Barracks", TERRAN_BARRACKS, BUILD_BARRACKS, ACTION_BUILD_BARRACKS, 4, BIG_GRID, BIG_PIX),
                 Building("Factory", TERRAN_FACTORY, BUILD_FACTORY, ACTION_BUILD_FACTORY, 2, BIG_GRID, BIG_PIX),
                 Building("Starport", TERRAN_STARPORT, BUILD_STARPORT, ACTION_BUILD_STARPORT, 2, BIG_GRID, BIG_PIX),
@@ -87,7 +85,7 @@ class Building:
         elif self.identifier == TERRAN_REFINERY:
             return self.get_location_from_id(NEUTRAL_VESPENE_GAS, obs)
         elif self.identifier == TERRAN_SUPPLY_DEPOT:
-            return agent.transformDistance(round(agent.cc_x.mean()), -35, round(agent.cc_y.mean()), -15 + 7 * self.amount_of_building(obs))
+            return agent.transformDistance(round(agent.cc_x.mean()), -35, round(agent.cc_y.mean()), -25 + 7 * self.amount_of_building(obs))
         else:
             amount = self.amount_of_building(obs)
         x_offset = 20 + int(amount/COLUMN_HEIGHT) * self.size_grid
@@ -108,16 +106,16 @@ TERRAN_MEDIVAC = 54
 
 
 class Unit:
-    def __init__(self, name, identifier, build, smart_action, builds_from):
+    def __init__(self, name, identifier, train, smart_action, builds_from):
         self.name = name
         self.identifier = identifier
-        self.build = build
+        self.train = train
         self.smart_action = smart_action
         self.builds_from = builds_from
 
     @staticmethod
     def units():
-        return [Unit("SCV", TERRAN_SCV, TRAIN_SCV, ACTION_TRAIN_SCV, "Command Center"),
-                Unit("Marine", TERRAN_MARINE, TRAIN_MARINE, ACTION_TRAIN_MARINE, "Barracks"),
-                Unit("Medivac", TERRAN_MEDIVAC, TRAIN_MEDIVAC, ACTION_TRAIN_MEDIVAC, "Starport"),
+        return [Unit("SCV", TERRAN_SCV, TRAIN_SCV, ACTION_TRAIN_SCV, TERRAN_COMMAND_CENTER),
+                Unit("Marine", TERRAN_MARINE, TRAIN_MARINE, ACTION_TRAIN_MARINE, TERRAN_BARRACKS),
+                Unit("Medivac", TERRAN_MEDIVAC, TRAIN_MEDIVAC, ACTION_TRAIN_MEDIVAC, TERRAN_STARPORT),
                ]

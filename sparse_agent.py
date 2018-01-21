@@ -103,12 +103,14 @@ class SparseAgent(base_agent.BaseAgent):
         self.qlearn = QLearningTable(actions=list(range(len(smart_actions))))
         self.previous_action = None
         self.previous_state = None
+        self.previous_num_starports = 0
         self.cc_y = None
         self.cc_x = None
         self.move_number = 0
 
         if os.path.isfile(DATA_FILE + '.gz'):
-            self.qlearn.q_table = pd.read_pickle(DATA_FILE + '.gz', compression='gzip')
+            self.qlearn.q_table = pd.read_pickle(
+                DATA_FILE + '.gz', compression='gzip')
 
     def select_workers(self, obs):
         unit_type = obs.observation['screen'][_UNIT_TYPE]
@@ -136,15 +138,16 @@ class SparseAgent(base_agent.BaseAgent):
                 y_offset = random.randint(-1, 1)
                 return actions.FunctionCall(_ATTACK_MINIMAP, [_NOT_QUEUED, self.transformLocation(int(x) + (x_offset * 8), int(y) + (y_offset * 8))])
 
-    def train_unit(self, building_type, obs):
-        unit_type = obs.observation['screen'][_UNIT_TYPE]
+    def train_unit(self, unit, obs):
         if self.move_number == 0:
-            target = ub.Building.get_location_from_id(building_type, obs)
+            target = ub.Building.get_location_from_id(unit.builds_from, obs)
             if target is not None:
+                print("trying to build from a building")
                 return actions.FunctionCall(_SELECT_POINT, [_SELECT_ALL, target])
         if self.move_number == 1:
-            if unit_type in obs.observation['available_actions']:
-                return actions.FunctionCall(unit_type, [_QUEUED])
+            if unit.train in obs.observation['available_actions']:
+                print("training unit")
+                return actions.FunctionCall(unit.train, [_QUEUED])
 
     # assumes a worker is selected
     def return_worker_to_harvest(self, obs):
@@ -192,29 +195,23 @@ class SparseAgent(base_agent.BaseAgent):
         return (smart_action, x, y)
 
 
-    def step(self, obs):
-        super(SparseAgent, self).step(obs)
+    def award_step_reward(self, current_state, obs):
+        reward = 0
+        starport = BUILDING_ACTION_MAP[ub.ACTION_BUILD_STARPORT]
+        num_starports = starport.amount_of_building(obs)
+        if num_starports > self.previous_num_starports:
+            reward += 10
 
-        if obs.last():
-            reward = obs.reward
+        self.qlearn.learn(str(self.previous_state),self.previous_action, reward, str(current_state))
+        self.previous_num_starports = num_starports
 
-            self.qlearn.learn(str(self.previous_state),
-                              self.previous_action, reward, 'terminal')
+    def award_end_game_reward(self):
+        #reward = obs.reward
+        reward = 0
+        self.qlearn.learn(str(self.previous_state), self.previous_action, reward, 'terminal')
 
-            self.qlearn.q_table.to_pickle(DATA_FILE + '.gz', 'gzip')
-            self.previous_action = None
-            self.previous_state = None
-            self.move_number = 0
-
-            return actions.FunctionCall(_NO_OP, [])
-
+    def update_state(self, obs):
         unit_type = obs.observation['screen'][_UNIT_TYPE]
-
-        if obs.first():
-            player_y, player_x = (obs.observation['minimap'][_PLAYER_RELATIVE] == _PLAYER_SELF).nonzero()
-            self.base_top_left = 1 if player_y.any() and player_y.mean() <= 31 else 0
-            self.cc_y, self.cc_x = (unit_type == ub.TERRAN_COMMAND_CENTER).nonzero()
-
         cc_y, cc_x = (unit_type == ub.TERRAN_COMMAND_CENTER).nonzero()
         cc_count = 1 if cc_y.any() else 0
 
@@ -237,15 +234,41 @@ class SparseAgent(base_agent.BaseAgent):
                 x = int(math.ceil((enemy_x[i] + 1) / 32))
                 hot_squares[((y - 1) * 2) + (x - 1)] = 1
 
-            if not self.base_top_left:
-                hot_squares = hot_squares[::-1]
+        if not self.base_top_left:
+            hot_squares = hot_squares[::-1]
 
-            for i in range(0, 4):
-                current_state[i + 4] = hot_squares[i]
+        for i in range(0, 4):
+            current_state[i + 4] = hot_squares[i]
+        return current_state
+
+    def step(self, obs):
+        super(SparseAgent, self).step(obs)
+
+
+        if obs.last():
+
+            self.award_end_game_reward()
+            self.qlearn.q_table.to_pickle(DATA_FILE + '.gz', 'gzip')
+            self.previous_action = None
+            self.previous_state = None
+            self.move_number = 0
+
+            return actions.FunctionCall(_NO_OP, [])
+
+        unit_type = obs.observation['screen'][_UNIT_TYPE]
+
+        if obs.first():
+            player_y, player_x = (
+                obs.observation['minimap'][_PLAYER_RELATIVE] == _PLAYER_SELF).nonzero()
+            self.base_top_left = 1 if player_y.any() and player_y.mean() <= 31 else 0
+            self.cc_y, self.cc_x = (
+                unit_type == ub.TERRAN_COMMAND_CENTER).nonzero()
+
+        if self.move_number == 0:
+            current_state = self.update_state(obs)
 
             if self.previous_action is not None:
-                self.qlearn.learn(str(self.previous_state),
-                                  self.previous_action, 0, str(current_state))
+               self.award_step_reward(current_state, obs)
 
             rl_action = self.qlearn.choose_action(str(current_state))
 
@@ -265,6 +288,6 @@ class SparseAgent(base_agent.BaseAgent):
 
         if move is None:
             move = actions.FunctionCall(_NO_OP, [])
-        
+
         self.move_number = 0 if self.move_number == 3 else self.move_number + 1
         return move
