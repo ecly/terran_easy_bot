@@ -42,11 +42,10 @@ UNIT_ACTION_MAP = {u.smart_action: u for u in _UNITS}
 BUILDING_ACTION_MAP = {b.smart_action: b for b in _BUILDINGS}
 smart_actions = [ACTION_DO_NOTHING] + list(UNIT_ACTION_MAP) + list(BUILDING_ACTION_MAP)
 
-for mm_x in range(0, 64):
-    for mm_y in range(0, 64):
-        if (mm_x + 1) % 32 == 0 and (mm_y + 1) % 32 == 0:
-            smart_actions.append(ACTION_ATTACK + '_' +
-                                 str(mm_x - 16) + '_' + str(mm_y - 16))
+#for mm_x in range(0, 64):
+    #for mm_y in range(0, 64):
+        #if (mm_x + 1) % 32 == 0 and (mm_y + 1) % 32 == 0:
+            #smart_actions.append(ACTION_ATTACK + '_' + str(mm_x - 16) + '_' + str(mm_y - 16))
 
 # Stolen from https://github.com/MorvanZhou/Reinforcement-learning-with-tensorflow
 class QLearningTable:
@@ -104,6 +103,7 @@ class SparseAgent(base_agent.BaseAgent):
         self.previous_action = None
         self.previous_state = None
         self.previous_num_starports = 0
+        self.previous_num_factory = 0
         self.cc_y = None
         self.cc_x = None
         self.move_number = 0
@@ -199,15 +199,34 @@ class SparseAgent(base_agent.BaseAgent):
         reward = 0
         starport = BUILDING_ACTION_MAP[ub.ACTION_BUILD_STARPORT]
         num_starports = starport.amount_of_building(obs)
+        """
+        num_starports =  self.amount_of_building(_TERRAN_STARPORT, obs)
         if num_starports > self.previous_num_starports:
-            reward += 10
-
-        self.qlearn.learn(str(self.previous_state),self.previous_action, reward, str(current_state))
+            print("GOOD JOB on the starport")
+            reward += 100
         self.previous_num_starports = num_starports
 
-    def award_end_game_reward(self):
+        num_factory =  self.amount_of_building(_TERRAN_FACTORY, obs)
+        if num_factory > self.previous_num_factory:
+            print("GOOD JOB on the factory")
+            reward += 50
+        self.previous_num_factory = num_factory
+        self.previous_num_starports = num_starports
+        """
+        self.qlearn.learn(str(self.previous_state),self.previous_action, reward, str(current_state))
+        
+
+    def award_end_game_reward(self, obs):
         #reward = obs.reward
         reward = 0
+        reward += 10*self.previous_state[2]
+        reward += 50*self.previous_state[3]
+        reward += 250*self.previous_state[4]
+        print("Total barracks: " + str(self.previous_state[2]))
+        print("Total factory: " + str(self.previous_state[3]))
+        print("Total starport: " + str(self.previous_state[4]))
+        print("Total reward: " + str(reward))
+
         self.qlearn.learn(str(self.previous_state), self.previous_action, reward, 'terminal')
 
     def update_state(self, obs):
@@ -215,30 +234,39 @@ class SparseAgent(base_agent.BaseAgent):
         cc_y, cc_x = (unit_type == ub.TERRAN_COMMAND_CENTER).nonzero()
         cc_count = 1 if cc_y.any() else 0
 
-        depot = BUILDING_ACTION_MAP[ub.ACTION_BUILD_SUPPLY_DEPOT]
-        supply_depot_count = depot.amount_of_building(obs)
-        building_types = [ub.ACTION_BUILD_STARPORT, ub.ACTION_BUILD_BARRACKS, ub.ACTION_BUILD_BARRACKS]
-        building_count = sum(map(lambda b: BUILDING_ACTION_MAP[b].amount_of_building(obs), building_types))
 
-        if self.move_number == 0:
-            current_state = np.zeros(8)
-            current_state[0] = cc_count
-            current_state[1] = supply_depot_count
-            current_state[2] = building_count
-            current_state[3] = obs.observation['player'][_ARMY_SUPPLY]
+        supply_depot_count = BUILDING_ACTION_MAP[ub.ACTION_BUILD_SUPPLY_DEPOT].amount_of_building(obs)
+        refinerry_count = BUILDING_ACTION_MAP[ub.ACTION_BUILD_REFINERY].amount_of_building(obs)
+        barracks_count = BUILDING_ACTION_MAP[ub.ACTION_BUILD_BARRACKS].amount_of_building(obs)
+        factory_count = BUILDING_ACTION_MAP[ub.ACTION_BUILD_FACTORY].amount_of_building(obs)
+        starport_count = BUILDING_ACTION_MAP[ub.ACTION_BUILD_STARPORT].amount_of_building(obs)
+        current_state = np.zeros(6)
+        
+        current_state[0] = cc_count
+        current_state[1] = supply_depot_count
+        current_state[2] = barracks_count
+        current_state[3] = factory_count
+        current_state[4] = starport_count
+        current_state[5] = refinerry_count
+        print(current_state)
+        #current_state[5] = obs.observation['player'][_ARMY_SUPPLY]
 
-            hot_squares = np.zeros(4)
-            enemy_y, enemy_x = (obs.observation['minimap'][_PLAYER_RELATIVE] == _PLAYER_HOSTILE).nonzero()
-            for i in range(0, len(enemy_y)):
-                y = int(math.ceil((enemy_y[i] + 1) / 32))
-                x = int(math.ceil((enemy_x[i] + 1) / 32))
-                hot_squares[((y - 1) * 2) + (x - 1)] = 1
+        """
+        hot_squares = np.zeros(4)
+        enemy_y, enemy_x = (
+            obs.observation['minimap'][_PLAYER_RELATIVE] == _PLAYER_HOSTILE).nonzero()
+        for i in range(0, len(enemy_y)):
+            y = int(math.ceil((enemy_y[i] + 1) / 32))
+            x = int(math.ceil((enemy_x[i] + 1) / 32))
+
+            hot_squares[((y - 1) * 2) + (x - 1)] = 1
 
         if not self.base_top_left:
             hot_squares = hot_squares[::-1]
 
         for i in range(0, 4):
             current_state[i + 4] = hot_squares[i]
+        """
         return current_state
 
     def step(self, obs):
@@ -247,7 +275,8 @@ class SparseAgent(base_agent.BaseAgent):
 
         if obs.last():
 
-            self.award_end_game_reward()
+            self.award_end_game_reward(obs)
+            print("save the damn data")
             self.qlearn.q_table.to_pickle(DATA_FILE + '.gz', 'gzip')
             self.previous_action = None
             self.previous_state = None
