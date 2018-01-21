@@ -1,0 +1,4 @@
+/.project
+/.pydevproject
+__pycache__/*
+sparse_agent_data.gz
