@@ -82,14 +82,16 @@ class Building:
     def get_location(self, agent, obs):
         if self.build in SHARED_COLUMN:
             amount = sum(map(lambda b: b.amount_of_building(obs), filter(lambda b: b.build in SHARED_COLUMN, self.buildings())))
+            x_offset = 20 + int(amount/COLUMN_HEIGHT) * self.size_grid
+            y_offset = -30 + self.size_grid * (amount % COLUMN_HEIGHT)
+        elif self.identifier == TERRAN_SUPPLY_DEPOT:
+            amount = self.amount_of_building(obs)
+            shift = 4
+            x_offset = -37 if amount < shift else -25 + self.size_grid * (amount % shift)
+            y_offset = -23 + self.size_grid * amount if amount < shift else -32
         elif self.identifier == TERRAN_REFINERY:
             return self.get_location_from_id(NEUTRAL_VESPENE_GAS, obs)
-        elif self.identifier == TERRAN_SUPPLY_DEPOT:
-            return agent.transformDistance(round(agent.cc_x.mean()), -35, round(agent.cc_y.mean()), -25 + 7 * self.amount_of_building(obs))
-        else:
-            amount = self.amount_of_building(obs)
-        x_offset = 20 + int(amount/COLUMN_HEIGHT) * self.size_grid
-        y_offset = -30 + self.size_grid * (amount % COLUMN_HEIGHT)
+
         return agent.transformDistance(round(agent.cc_x.mean()), x_offset, round(agent.cc_y.mean()), y_offset)
 
 TRAIN_SCV = actions.FUNCTIONS.Train_SCV_quick.id
